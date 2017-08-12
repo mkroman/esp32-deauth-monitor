@@ -1,0 +1,10 @@
+menu "Deauth Monitor"
+
+config WIFI_SSID
+  string "WiFi SSID"
+  default "myssid"
+  help
+    SSID (network name) to monitor deauth packets for.
+
+endmenu
+
