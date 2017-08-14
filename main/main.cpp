@@ -18,8 +18,6 @@ esp_err_t event_handler(void *ctx, system_event_t *event)
     return ESP_OK;
 }
 
-extern "C" uint8_t temprature_sens_read();
-
 int8_t wifi_get_target_channel() {
     wifi_scan_config_t config = {
         .ssid = (uint8_t*)CONFIG_WIFI_SSID,
@@ -50,10 +48,45 @@ void wifi_rf_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
     wifi_promiscuous_pkt_t* pkt = reinterpret_cast<wifi_promiscuous_pkt_t*>(buf);
     ieee80211::Header* hdr = reinterpret_cast<ieee80211::Header*>(pkt->payload);
 
-    if (hdr->is_deauth()) {
-        ESP_LOGI(TAG, "DEAUTH: addr1=" MACSTR " addr2=" MACSTR " addr3=" MACSTR " addr4=" MACSTR,
-                 MAC2STR(hdr->addr1), MAC2STR(hdr->addr2) , MAC2STR(hdr->addr3),
-                 MAC2STR(hdr->addr4));
+    if (type != WIFI_PKT_MGMT)
+    {
+        ESP_LOGE(TAG, "type=%d - expected WIFI_PKT_MGMT", type);
+    }
+
+    if (hdr->is_deauth())
+    {
+
+        bool tods, fromds;
+
+        tods = hdr->has_tods();
+        fromds = hdr->has_fromds();
+
+        if (!tods && !fromds)
+        {
+            // IBSS/DLS
+            ESP_LOGI(TAG, "DEAUTH (IBSS/DLS): reason=%d addr1=" MACSTR " addr2=" MACSTR " addr3=" MACSTR " addr4=" MACSTR,
+                     hdr->u.deauth.reason_code, MAC2STR(hdr->addr1), MAC2STR(hdr->addr2) , MAC2STR(hdr->addr3),
+                     MAC2STR(hdr->addr4));
+        }
+        else if (!tods && fromds)
+        {
+            // AP -> STA
+            ESP_LOGI(TAG, "DEAUTH (AP -> STA): reason=%d destination=" MACSTR " bssid=" MACSTR " sender=" MACSTR,
+                     hdr->u.deauth.reason_code, MAC2STR(hdr->addr1), MAC2STR(hdr->addr2) , MAC2STR(hdr->addr3));
+        }
+        else if (tods && !fromds)
+        {
+            // AP <- STA
+            ESP_LOGI(TAG, "DEAUTH (AP <- STA): reason=%d destination=" MACSTR " bssid=" MACSTR " sender=" MACSTR,
+                     hdr->u.deauth.reason_code, MAC2STR(hdr->addr3), MAC2STR(hdr->addr1) , MAC2STR(hdr->addr2));
+        }
+        else if(tods && fromds)
+        {
+            // unspecified (WDS)
+            ESP_LOGI(TAG, "DEAUTH (unspecified (WDS)): reason=%d addr1=" MACSTR " addr2=" MACSTR " addr3=" MACSTR " addr4=" MACSTR,
+                     hdr->u.deauth.reason_code, MAC2STR(hdr->addr1), MAC2STR(hdr->addr2) , MAC2STR(hdr->addr3),
+                     MAC2STR(hdr->addr4));
+        }
     }
 }
 
@@ -94,7 +127,5 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Target monitoring channel: %d", target_channel);
 
     init_promiscuous_wifi(target_channel);
-
-    fflush(stdout);
 }
 
